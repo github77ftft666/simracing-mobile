@@ -20,6 +20,7 @@ export default function App() {
   const [brake, setBrake] = useState(0)
   const [clutch, setClutch] = useState(0)
   const [gear, setGear] = useState(1)
+  const [sensor, setSensor] = useState({ roll: 0, pitch: 0 })
   const socket = useRef<WebSocket | null>(null)
   const sequence = useRef(0)
   const baseline = useRef({ beta: 0, gamma: 0, isSet: false })
@@ -82,6 +83,7 @@ export default function App() {
       const newBrake = clamp(Math.max(0, pitch / 25))
       controls.current.steering = newSteering; controls.current.throttle = newThrottle; controls.current.brake = newBrake
       setSteering(newSteering); setThrottle(newThrottle); setBrake(newBrake)
+      setSensor({ roll: gamma - baseline.current.gamma, pitch })
     }
     window.addEventListener('deviceorientation', onOrientation)
     return () => window.removeEventListener('deviceorientation', onOrientation)
@@ -104,6 +106,7 @@ export default function App() {
     </section>
     <section className="wheel-zone" aria-label="Руль">
       <div className="wheel" style={dialStyle}><div className="wheel-dot" /></div>
+      <output>РУЛЬ {sensor.roll >= 0 ? '+' : ''}{Math.round(sensor.roll)}° · НАКЛОН {sensor.pitch >= 0 ? '+' : ''}{Math.round(sensor.pitch)}°</output>
       <button className="center" onClick={center}>ЦЕНТР</button>
     </section>
     <section className="right-controls" aria-label="Передачи">
