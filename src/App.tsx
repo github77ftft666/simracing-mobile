@@ -84,8 +84,8 @@ export default function App() {
       const steeringAngle = beta - baseline.current.beta
       const pedalAngle = gamma - baseline.current.gamma
       const newSteering = normalizedTilt(steeringAngle, STEERING_DEAD_ZONE, 32)
-      const newThrottle = pedalAngle < -PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
-      const newBrake = pedalAngle > PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
+      const newThrottle = pedalAngle > PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
+      const newBrake = pedalAngle < -PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
       controls.current.steering = newSteering; controls.current.throttle = newThrottle; controls.current.brake = newBrake
       setSteering(newSteering); setThrottle(newThrottle); setBrake(newBrake)
       setSensor({ roll: steeringAngle, pitch: pedalAngle })
