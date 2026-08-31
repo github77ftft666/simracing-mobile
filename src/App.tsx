@@ -4,11 +4,14 @@ import type { OutboundMessage } from './protocol'
 type Connection = 'offline' | 'connecting' | 'online'
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value))
-const normalizedTilt = (angle: number, deadZone = 3, fullScale = 32) => {
+const STEERING_DEAD_ZONE = 5
+const PEDAL_DEAD_ZONE = 7
+const normalizedTilt = (angle: number, deadZone: number, fullScale: number) => {
   const abs = Math.abs(angle)
   if (abs < deadZone) return 0
   return clamp(Math.sign(angle) * ((abs - deadZone) / (fullScale - deadZone)))
 }
+const pedalAmount = (angle: number) => Math.max(0, Math.min(1, (Math.abs(angle) - PEDAL_DEAD_ZONE) / (25 - PEDAL_DEAD_ZONE)))
 
 export default function App() {
   const [connection, setConnection] = useState<Connection>('offline')
@@ -53,6 +56,7 @@ export default function App() {
       ? { beta: latestOrientation.current.beta, gamma: latestOrientation.current.gamma, isSet: true }
       : { beta: 0, gamma: 0, isSet: false }
     setSteering(0); setThrottle(0); setBrake(0)
+    setSensor({ roll: 0, pitch: 0 })
     controls.current.steering = 0; controls.current.throttle = 0; controls.current.brake = 0
     send({ type: 'event', action: 'center' })
   }, [send])
@@ -77,13 +81,14 @@ export default function App() {
       const gamma = event.gamma ?? 0
       latestOrientation.current = { beta, gamma, known: true }
       if (!baseline.current.isSet) baseline.current = { beta, gamma, isSet: true }
-      const newSteering = normalizedTilt(gamma - baseline.current.gamma)
-      const pitch = beta - baseline.current.beta
-      const newThrottle = clamp(Math.max(0, -pitch / 25))
-      const newBrake = clamp(Math.max(0, pitch / 25))
+      const steeringAngle = beta - baseline.current.beta
+      const pedalAngle = gamma - baseline.current.gamma
+      const newSteering = normalizedTilt(steeringAngle, STEERING_DEAD_ZONE, 32)
+      const newThrottle = pedalAngle < -PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
+      const newBrake = pedalAngle > PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
       controls.current.steering = newSteering; controls.current.throttle = newThrottle; controls.current.brake = newBrake
       setSteering(newSteering); setThrottle(newThrottle); setBrake(newBrake)
-      setSensor({ roll: gamma - baseline.current.gamma, pitch })
+      setSensor({ roll: steeringAngle, pitch: pedalAngle })
     }
     window.addEventListener('deviceorientation', onOrientation)
     return () => window.removeEventListener('deviceorientation', onOrientation)
@@ -106,7 +111,7 @@ export default function App() {
     </section>
     <section className="wheel-zone" aria-label="Руль">
       <div className="wheel" style={dialStyle}><div className="wheel-dot" /></div>
-      <output>РУЛЬ {sensor.roll >= 0 ? '+' : ''}{Math.round(sensor.roll)}° · НАКЛОН {sensor.pitch >= 0 ? '+' : ''}{Math.round(sensor.pitch)}°</output>
+      <output>РУЛЬ {sensor.roll >= 0 ? '+' : ''}{Math.round(sensor.roll)}° · ПЕДАЛИ {sensor.pitch >= 0 ? '+' : ''}{Math.round(sensor.pitch)}°</output>
       <button className="center" onClick={center}>ЦЕНТР</button>
     </section>
     <section className="right-controls" aria-label="Передачи">
