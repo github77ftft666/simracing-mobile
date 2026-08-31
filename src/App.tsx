@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
 import type { OutboundMessage } from './protocol'
 
 type Connection = 'offline' | 'connecting' | 'online'
@@ -16,7 +17,10 @@ const pedalAmount = (angle: number) => Math.max(0, Math.min(1, (Math.abs(angle) 
 export default function App() {
   const [connection, setConnection] = useState<Connection>('offline')
   const [endpoint, setEndpoint] = useState(() => localStorage.getItem('pitlink-endpoint') ?? 'ws://192.168.0.10:32100')
+  const [pairingToken, setPairingToken] = useState(() => localStorage.getItem('pitlink-pairing-token') ?? '')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerError, setScannerError] = useState('')
   const [manual, setManual] = useState(false)
   const [steering, setSteering] = useState(0)
   const [throttle, setThrottle] = useState(0)
@@ -25,6 +29,7 @@ export default function App() {
   const [gear, setGear] = useState(1)
   const [sensor, setSensor] = useState({ roll: 0, pitch: 0 })
   const socket = useRef<WebSocket | null>(null)
+  const scanner = useRef<Html5Qrcode | null>(null)
   const sequence = useRef(0)
   const baseline = useRef({ beta: 0, gamma: 0, isSet: false })
   const latestOrientation = useRef({ beta: 0, gamma: 0, known: false })
@@ -34,17 +39,54 @@ export default function App() {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message))
   }, [])
 
-  const connect = useCallback(() => {
+  const connect = useCallback((targetEndpoint = endpoint, targetToken = pairingToken) => {
     socket.current?.close()
     setConnection('connecting')
     try {
-      const ws = new WebSocket(endpoint)
+      const ws = new WebSocket(targetEndpoint)
       socket.current = ws
-      ws.onopen = () => { localStorage.setItem('pitlink-endpoint', endpoint); setConnection('online') }
+      ws.onopen = () => {
+        localStorage.setItem('pitlink-endpoint', targetEndpoint)
+        if (targetToken) ws.send(JSON.stringify({ type: 'pair', token: targetToken }))
+        else setConnection('online')
+      }
+      ws.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data)
+          if (message.type === 'paired') setConnection('online')
+          if (message.type === 'error') { setScannerError(message.message); ws.close() }
+        } catch { /* Ignore non-protocol messages. */ }
+      }
       ws.onclose = () => setConnection('offline')
       ws.onerror = () => setConnection('offline')
     } catch { setConnection('offline') }
-  }, [endpoint])
+  }, [endpoint, pairingToken])
+
+  const applyPairingCode = useCallback((raw: string) => {
+    try {
+      const pair = new URL(raw)
+      const pairedEndpoint = pair.searchParams.get('endpoint')
+      const token = pair.searchParams.get('token')
+      if (pair.protocol !== 'pitlink:' || !pairedEndpoint || !token) throw new Error()
+      setEndpoint(pairedEndpoint)
+      setPairingToken(token)
+      localStorage.setItem('pitlink-endpoint', pairedEndpoint)
+      localStorage.setItem('pitlink-pairing-token', token)
+      setScannerOpen(false)
+      setSettingsOpen(false)
+      setScannerError('')
+      window.setTimeout(() => connect(pairedEndpoint, token), 0)
+    } catch { setScannerError('Это не код PitLink Controller.') }
+  }, [connect])
+
+  useEffect(() => {
+    if (!scannerOpen) return
+    const reader = new Html5Qrcode('qr-reader')
+    scanner.current = reader
+    reader.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, applyPairingCode, () => undefined)
+      .catch(() => setScannerError('Не удалось открыть камеру. Разрешите доступ или введите адрес вручную.'))
+    return () => { scanner.current?.stop().catch(() => undefined); scanner.current = null }
+  }, [applyPairingCode, scannerOpen])
 
   const center = useCallback(async () => {
     const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
@@ -101,7 +143,7 @@ export default function App() {
   return <main className="controller">
     <header>
       <div className="brand">PITLINK</div>
-      <button className={`connection ${connection}`} onClick={connect}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'ПОДКЛЮЧИТЬ ПК'}</button>
+      <button className={`connection ${connection}`} onClick={() => connection === 'offline' ? setSettingsOpen(true) : connect()}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'ПОДКЛЮЧИТЬ ПК'}</button>
       <button className="settings-button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>⚙</button>
     </header>
     <section className="left-controls" aria-label="Педали">
@@ -128,9 +170,11 @@ export default function App() {
         <p>Подключитесь к одной Wi‑Fi сети или включите USB‑модем на телефоне.</p>
         <label>Адрес ресивера <input value={endpoint} onChange={event => setEndpoint(event.target.value)} autoCapitalize="none" inputMode="url" /></label>
         <small>Порт: 32100 · Только локальная сеть</small>
-        <div><button type="button" onClick={() => setSettingsOpen(false)}>Отмена</button><button type="submit">Сохранить и подключить</button></div>
+        {scannerError && <p className="scan-error">{scannerError}</p>}
+        <div><button type="button" onClick={() => setScannerOpen(true)}>Сканировать QR</button><button type="button" onClick={() => setSettingsOpen(false)}>Отмена</button><button type="submit">Сохранить и подключить</button></div>
       </form>
     </div>}
+    {scannerOpen && <div className="sheet scanner-sheet" role="dialog" aria-modal="true"><div><h1>Сканируйте QR с ПК</h1><div id="qr-reader" /><button onClick={() => setScannerOpen(false)}>Отмена</button></div></div>}
   </main>
 }
 

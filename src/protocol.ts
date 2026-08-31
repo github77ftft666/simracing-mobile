@@ -14,4 +14,9 @@ export type ControllerEvent = {
   action: 'gearUp' | 'gearDown' | 'center'
 }
 
-export type OutboundMessage = ControllerState | ControllerEvent
+export type PairMessage = {
+  type: 'pair'
+  token: string
+}
+
+export type OutboundMessage = ControllerState | ControllerEvent | PairMessage

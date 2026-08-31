@@ -1,0 +1,6 @@
+const fs = require('node:fs')
+const path = require('node:path')
+const out = path.join(__dirname, 'dist')
+fs.mkdirSync(path.join(out, 'profiles'), { recursive: true })
+fs.copyFileSync(path.join(__dirname, 'keyboard.ps1'), path.join(out, 'keyboard.ps1'))
+fs.copyFileSync(path.join(__dirname, 'profiles', 'automobilista2.json'), path.join(out, 'profiles', 'automobilista2.json'))

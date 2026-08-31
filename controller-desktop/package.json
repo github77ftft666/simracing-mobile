@@ -1,0 +1,20 @@
+{
+  "name": "pitlink-controller-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "bin": "index.cjs",
+  "scripts": {
+    "start": "node index.cjs",
+    "build:exe": "pkg index.cjs --targets node18-win-x64 --output dist/PitLink-Controller.exe && node copy-assets.cjs"
+  },
+  "pkg": {
+    "assets": ["keyboard.ps1", "profiles/*.json"]
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}

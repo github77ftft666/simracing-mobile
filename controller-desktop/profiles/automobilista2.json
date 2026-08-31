@@ -1,0 +1,14 @@
+{
+  "name": "Automobilista 2",
+  "mode": "keyboard",
+  "threshold": 0.08,
+  "bindings": {
+    "steerLeft": "A",
+    "steerRight": "D",
+    "throttle": "W",
+    "brake": "S",
+    "gearUp": "SPACE",
+    "gearDown": "LEFTALT"
+  },
+  "instructions": "In Automobilista 2 select Options > Controls > Keyboard and assign: A/D steering, W throttle, S brake, Space gear up, Left Alt gear down."
+}

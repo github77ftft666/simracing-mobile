@@ -9,3 +9,13 @@ npm install
 npm run dev
 cd receiver; npm install; npm start
 ```
+
+## Windows Controller
+
+```powershell
+cd controller-desktop
+npm install
+npm run build:exe
+```
+
+Готовый файл: `controller-desktop/dist/PitLink-Controller.exe`. После запуска откроется QR‑страница: в PWA выберите ⚙ → «Сканировать QR».
