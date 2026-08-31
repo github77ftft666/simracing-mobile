@@ -16,6 +16,7 @@ const SETUP_PORT = 32103
 const token = process.env.PITLINK_PAIR_TOKEN ?? crypto.randomBytes(24).toString('base64url')
 const profile = require('./profiles/automobilista2.json')
 const keyboardPath = process.pkg ? path.join(path.dirname(process.execPath), 'keyboard.ps1') : path.join(__dirname, 'keyboard.ps1')
+const firewallPath = process.pkg ? path.join(path.dirname(process.execPath), 'firewall.ps1') : path.join(__dirname, 'firewall.ps1')
 const keyboard = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', keyboardPath], { stdio: ['pipe', 'ignore', 'inherit'], windowsHide: true })
 let previousKeys = ''
 let controlServer
@@ -41,6 +42,12 @@ function certificatePaths() {
     serverCert: path.join(directory, 'pitlink-server.pem'),
     serverMeta: path.join(directory, 'pitlink-server.json'),
   }
+}
+
+function requestFirewallAccess() {
+  if (!process.pkg || process.platform !== 'win32') return
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', firewallPath, '-ProgramPath', process.execPath, '-Ports', `${CONTROL_PORT},${QR_PORT},${SETUP_PORT}`], { stdio: 'ignore', windowsHide: true })
+  child.on('error', () => console.log('Не удалось запросить правило Windows Firewall.'))
 }
 
 async function loadCertificate(address) {
@@ -170,9 +177,11 @@ async function main() {
   await startControlServer(tls)
   await startSetupServer(address, tls.rootCer)
   await startQrServer(address, pairCode)
+  requestFirewallAccess()
   const qrPage = `http://${address}:${QR_PORT}/qr`
   console.log(`PitLink Controller готов. QR: ${qrPage}`)
   console.log(`Настройка сертификата: ${setupUrl}`)
+  console.log('Запрошено разрешение Windows Firewall для частной сети.')
   console.log(profile.instructions)
   if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', qrPage], { detached: true, stdio: 'ignore' }).unref()
 }

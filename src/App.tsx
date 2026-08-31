@@ -35,6 +35,7 @@ export default function App() {
   const baseline = useRef({ beta: 0, gamma: 0, isSet: false })
   const latestOrientation = useRef({ beta: 0, gamma: 0, known: false })
   const controls = useRef({ steering: 0, throttle: 0, brake: 0, clutch: 0, gear: 1 })
+  const autoReconnect = useRef(localStorage.getItem('pitlink-autoconnect') === 'true')
 
   const send = useCallback((message: OutboundMessage) => {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message))
@@ -54,14 +55,37 @@ export default function App() {
       ws.onmessage = event => {
         try {
           const message = JSON.parse(event.data)
-          if (message.type === 'paired') { setConnection('online'); setScannerError('') }
+          if (message.type === 'paired') {
+            localStorage.setItem('pitlink-autoconnect', 'true')
+            autoReconnect.current = true
+            setConnection('online')
+            setScannerError('')
+          }
           if (message.type === 'error') { setScannerError(message.message); ws.close() }
         } catch { /* Ignore non-protocol messages. */ }
       }
       ws.onclose = () => setConnection('offline')
-      ws.onerror = () => setConnection('offline')
+      ws.onerror = () => { setScannerError('Защищённое соединение не создано. Проверьте, что Controller запущен, телефон в той же сети и Windows Firewall разрешён.'); setConnection('offline') }
     } catch { setConnection('offline') }
   }, [endpoint, pairingToken])
+
+  const requestMotionPermission = useCallback(async () => {
+    const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
+    if (!motion.requestPermission) return true
+    const granted = await motion.requestPermission() === 'granted'
+    if (!granted) alert('Разрешите доступ к движению устройства в настройках Safari, чтобы использовать руль и педали.')
+    return granted
+  }, [])
+
+  const startController = useCallback(async () => {
+    if (!await requestMotionPermission()) return
+    if (endpoint && pairingToken) connect()
+    else setSettingsOpen(true)
+  }, [connect, endpoint, pairingToken, requestMotionPermission])
+
+  useEffect(() => {
+    if (autoReconnect.current && endpoint && pairingToken) connect()
+  }, [connect, endpoint, pairingToken])
 
   const applyPairingCode = useCallback((raw: string) => {
     try {
@@ -74,6 +98,8 @@ export default function App() {
       setPairingToken(token)
       localStorage.setItem('pitlink-endpoint', pairedEndpoint)
       localStorage.setItem('pitlink-pairing-token', token)
+      localStorage.removeItem('pitlink-autoconnect')
+      autoReconnect.current = false
       setScannerOpen(false)
       setScannerError('')
       setSetupUrl(setup ?? '')
@@ -97,11 +123,7 @@ export default function App() {
   }, [applyPairingCode, scannerOpen])
 
   const center = useCallback(async () => {
-    const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
-    if (motion.requestPermission && await motion.requestPermission() !== 'granted') {
-      alert('Разрешите доступ к движению устройства, затем нажмите «ЦЕНТР» ещё раз.')
-      return
-    }
+    if (!await requestMotionPermission()) return
     baseline.current = latestOrientation.current.known
       ? { beta: latestOrientation.current.beta, gamma: latestOrientation.current.gamma, isSet: true }
       : { beta: 0, gamma: 0, isSet: false }
@@ -109,7 +131,7 @@ export default function App() {
     setSensor({ roll: 0, pitch: 0 })
     controls.current.steering = 0; controls.current.throttle = 0; controls.current.brake = 0
     send({ type: 'event', action: 'center' })
-  }, [send])
+  }, [requestMotionPermission, send])
 
   const shift = useCallback((direction: 1 | -1) => {
     if (manual) return
@@ -151,7 +173,7 @@ export default function App() {
   return <main className="controller">
     <header>
       <div className="brand">PITLINK</div>
-      <button className={`connection ${connection}`} onClick={() => connection === 'offline' ? setSettingsOpen(true) : connect()}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'ПОДКЛЮЧИТЬ ПК'}</button>
+      <button className={`connection ${connection}`} onClick={() => connection === 'offline' ? startController() : connect()}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'НАЧАТЬ / ПОДКЛЮЧИТЬ ПК'}</button>
       <button className="settings-button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>⚙</button>
     </header>
     <section className="left-controls" aria-label="Педали">

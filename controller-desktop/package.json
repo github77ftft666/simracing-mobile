@@ -9,7 +9,7 @@
   },
   "pkg": {
     "assets": [
-      "keyboard.ps1",
+      "keyboard.ps1", "firewall.ps1",
       "profiles/*.json"
     ]
   },

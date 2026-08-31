@@ -11,3 +11,4 @@
 - 2026-08-31: создан локальный WebSocket‑ресивер MVP.
 - 2026-08-31: добавлен Windows Controller с QR‑сопряжением и профилем Automobilista 2.
 - 2026-08-31: Windows Controller переведён на локальный WSS с самостоятельной установкой CA для iOS и Android.
+- 2026-08-31: упакованный Controller запрашивает UAC‑разрешение на правило Windows Firewall для Private network и своих TCP‑портов.
