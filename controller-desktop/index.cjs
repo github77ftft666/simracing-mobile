@@ -8,11 +8,12 @@ const path = require('node:path')
 const { spawn } = require('node:child_process')
 const QRCode = require('qrcode')
 const selfsigned = require('selfsigned')
-const { WebSocketServer } = require('ws')
+const { WebSocket, WebSocketServer } = require('ws')
 
 const CONTROL_PORT = 32100
 const QR_PORT = 32102
 const SETUP_PORT = 32103
+const RELAY_URL = 'wss://pitlink.135.106.180.96.nip.io/ws'
 let token = ''
 const profile = require('./profiles/automobilista2.json')
 const keyboardPath = process.pkg ? path.join(path.dirname(process.execPath), 'keyboard.ps1') : path.join(__dirname, 'keyboard.ps1')
@@ -152,6 +153,23 @@ function startControlServer(tls) {
   return new Promise(resolve => server.listen(CONTROL_PORT, '0.0.0.0', resolve))
 }
 
+function startRelayConnection(session) {
+  const connect = () => {
+    const relay = new WebSocket(RELAY_URL)
+    relay.on('open', () => relay.send(JSON.stringify({ type: 'register', role: 'desktop', session, secret: token })))
+    relay.on('message', raw => {
+      let message
+      try { message = JSON.parse(raw.toString()) } catch { return }
+      if (message.type === 'state') sendKeys(message)
+      if (message.type === 'event' && (message.action === 'gearUp' || message.action === 'gearDown')) keyboard.stdin.write(`${JSON.stringify(message)}\n`)
+      if (message.type === 'registered') console.log('PitLink Relay подключён.')
+    })
+    relay.on('close', () => { releaseAll(); setTimeout(connect, 2000).unref() })
+    relay.on('error', () => undefined)
+  }
+  connect()
+}
+
 function startSetupServer(address, rootCer) {
   const config = mobileConfig(rootCer)
   setupServer = http.createServer((request, response) => {
@@ -182,10 +200,11 @@ function startQrServer(address, pairCode) {
 async function main() {
   const address = lanAddress()
   token = loadPairingToken()
+  const session = crypto.createHash('sha256').update(token).digest('base64url').slice(0, 32)
   const tls = await loadCertificate(address)
   const setupUrl = `http://${address}:${SETUP_PORT}/setup`
-  const pairCode = `pitlink://pair?endpoint=${encodeURIComponent(`wss://${address}:${CONTROL_PORT}`)}&token=${token}&setup=${encodeURIComponent(setupUrl)}`
-  await startControlServer(tls)
+  const pairCode = `pitlink://pair?endpoint=${encodeURIComponent(RELAY_URL)}&token=${token}&session=${session}`
+  startRelayConnection(session)
   await startSetupServer(address, tls.rootCer)
   await startQrServer(address, pairCode)
   requestFirewallAccess()

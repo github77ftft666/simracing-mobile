@@ -18,6 +18,7 @@ export default function App() {
   const [connection, setConnection] = useState<Connection>('offline')
   const [endpoint, setEndpoint] = useState(() => localStorage.getItem('pitlink-endpoint') ?? 'ws://192.168.0.10:32100')
   const [pairingToken, setPairingToken] = useState(() => localStorage.getItem('pitlink-pairing-token') ?? '')
+  const [relaySession, setRelaySession] = useState(() => localStorage.getItem('pitlink-relay-session') ?? '')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerError, setScannerError] = useState('')
@@ -42,7 +43,7 @@ export default function App() {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message))
   }, [])
 
-  const connect = useCallback((targetEndpoint = endpoint, targetToken = pairingToken) => {
+  const connect = useCallback((targetEndpoint = endpoint, targetToken = pairingToken, targetSession = relaySession) => {
     socket.current?.close()
     setConnection('connecting')
     try {
@@ -50,13 +51,14 @@ export default function App() {
       socket.current = ws
       ws.onopen = () => {
         localStorage.setItem('pitlink-endpoint', targetEndpoint)
-        if (targetToken) ws.send(JSON.stringify({ type: 'pair', token: targetToken }))
+        if (targetToken && targetSession) ws.send(JSON.stringify({ type: 'register', role: 'phone', session: targetSession, secret: targetToken }))
+        else if (targetToken) ws.send(JSON.stringify({ type: 'pair', token: targetToken }))
         else setConnection('online')
       }
       ws.onmessage = event => {
         try {
           const message = JSON.parse(event.data)
-          if (message.type === 'paired') {
+          if (message.type === 'paired' || message.type === 'registered') {
             localStorage.setItem('pitlink-autoconnect', 'true')
             autoReconnect.current = true
             setConnection('online')
@@ -68,7 +70,7 @@ export default function App() {
       ws.onclose = () => setConnection('offline')
       ws.onerror = () => { setScannerError(`Не удалось открыть WSS по адресу ${targetEndpoint}. Запустите Controller и проверьте, что телефон в той же Wi‑Fi сети.`); setConnection('offline') }
     } catch { setConnection('offline') }
-  }, [endpoint, pairingToken])
+  }, [endpoint, pairingToken, relaySession])
 
   const requestMotionPermission = useCallback(async () => {
     const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
@@ -101,24 +103,28 @@ export default function App() {
       const pair = new URL(raw)
       const pairedEndpoint = pair.searchParams.get('endpoint')
       const token = pair.searchParams.get('token')
+      const session = pair.searchParams.get('session')
       const setup = pair.searchParams.get('setup')
       if (pair.protocol !== 'pitlink:' || !pairedEndpoint || !token) throw new Error()
       setEndpoint(pairedEndpoint)
       setPairingToken(token)
+      setRelaySession(session ?? '')
       localStorage.setItem('pitlink-endpoint', pairedEndpoint)
       localStorage.setItem('pitlink-pairing-token', token)
+      if (session) localStorage.setItem('pitlink-relay-session', session)
+      else localStorage.removeItem('pitlink-relay-session')
       localStorage.removeItem('pitlink-autoconnect')
       autoReconnect.current = false
       setScannerOpen(false)
       setScannerError('')
       setSetupUrl(setup ?? '')
-      if (pairedEndpoint.startsWith('wss://') && setup) {
+      if (pairedEndpoint.startsWith('wss://') && setup && !session) {
         setSettingsOpen(true)
         setScannerError('Сначала установите локальный сертификат с ПК, затем вернитесь и подключитесь.')
         return
       }
       setSettingsOpen(false)
-      window.setTimeout(() => connect(pairedEndpoint, token), 0)
+      window.setTimeout(() => connect(pairedEndpoint, token, session ?? ''), 0)
     } catch { setScannerError('Это не код PitLink Controller.') }
   }, [connect])
 

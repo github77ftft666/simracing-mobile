@@ -1,0 +1,7 @@
+{
+  "name": "pitlink-relay",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "start": "node index.cjs" },
+  "dependencies": { "ws": "^8.18.3" }
+}
