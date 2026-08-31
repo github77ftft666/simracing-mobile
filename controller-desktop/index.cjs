@@ -13,7 +13,7 @@ const { WebSocketServer } = require('ws')
 const CONTROL_PORT = 32100
 const QR_PORT = 32102
 const SETUP_PORT = 32103
-const token = process.env.PITLINK_PAIR_TOKEN ?? crypto.randomBytes(24).toString('base64url')
+let token = ''
 const profile = require('./profiles/automobilista2.json')
 const keyboardPath = process.pkg ? path.join(path.dirname(process.execPath), 'keyboard.ps1') : path.join(__dirname, 'keyboard.ps1')
 const firewallPath = process.pkg ? path.join(path.dirname(process.execPath), 'firewall.ps1') : path.join(__dirname, 'firewall.ps1')
@@ -41,7 +41,17 @@ function certificatePaths() {
     serverKey: path.join(directory, 'pitlink-server-key.pem'),
     serverCert: path.join(directory, 'pitlink-server.pem'),
     serverMeta: path.join(directory, 'pitlink-server.json'),
+    pairingToken: path.join(directory, 'pitlink-pairing-token.txt'),
   }
+}
+
+function loadPairingToken() {
+  if (process.env.PITLINK_PAIR_TOKEN) return process.env.PITLINK_PAIR_TOKEN
+  const file = certificatePaths().pairingToken
+  if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim()
+  const created = crypto.randomBytes(24).toString('base64url')
+  fs.writeFileSync(file, created, { mode: 0o600 })
+  return created
 }
 
 function requestFirewallAccess() {
@@ -171,6 +181,7 @@ function startQrServer(address, pairCode) {
 
 async function main() {
   const address = lanAddress()
+  token = loadPairingToken()
   const tls = await loadCertificate(address)
   const setupUrl = `http://${address}:${SETUP_PORT}/setup`
   const pairCode = `pitlink://pair?endpoint=${encodeURIComponent(`wss://${address}:${CONTROL_PORT}`)}&token=${token}&setup=${encodeURIComponent(setupUrl)}`
@@ -181,7 +192,7 @@ async function main() {
   const qrPage = `http://${address}:${QR_PORT}/qr`
   console.log(`PitLink Controller готов. QR: ${qrPage}`)
   console.log(`Настройка сертификата: ${setupUrl}`)
-  console.log('Запрошено разрешение Windows Firewall для частной сети.')
+  if (process.pkg) console.log('Запрошено разрешение Windows Firewall для частной сети.')
   console.log(profile.instructions)
   if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', qrPage], { detached: true, stdio: 'ignore' }).unref()
 }

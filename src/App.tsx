@@ -22,6 +22,7 @@ export default function App() {
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerError, setScannerError] = useState('')
   const [setupUrl, setSetupUrl] = useState('')
+  const [portrait, setPortrait] = useState(() => window.matchMedia('(orientation: portrait)').matches)
   const [manual, setManual] = useState(false)
   const [steering, setSteering] = useState(0)
   const [throttle, setThrottle] = useState(0)
@@ -65,7 +66,7 @@ export default function App() {
         } catch { /* Ignore non-protocol messages. */ }
       }
       ws.onclose = () => setConnection('offline')
-      ws.onerror = () => { setScannerError('Защищённое соединение не создано. Проверьте, что Controller запущен, телефон в той же сети и Windows Firewall разрешён.'); setConnection('offline') }
+      ws.onerror = () => { setScannerError(`Не удалось открыть WSS по адресу ${targetEndpoint}. Запустите Controller и проверьте, что телефон в той же Wi‑Fi сети.`); setConnection('offline') }
     } catch { setConnection('offline') }
   }, [endpoint, pairingToken])
 
@@ -80,12 +81,20 @@ export default function App() {
   const startController = useCallback(async () => {
     if (!await requestMotionPermission()) return
     if (endpoint && pairingToken) connect()
-    else setSettingsOpen(true)
-  }, [connect, endpoint, pairingToken, requestMotionPermission])
+    else if (portrait) setSettingsOpen(true)
+    else alert('Поверните телефон вертикально, чтобы открыть настройки и отсканировать QR‑код.')
+  }, [connect, endpoint, pairingToken, portrait, requestMotionPermission])
 
   useEffect(() => {
     if (autoReconnect.current && endpoint && pairingToken) connect()
   }, [connect, endpoint, pairingToken])
+
+  useEffect(() => {
+    const query = window.matchMedia('(orientation: portrait)')
+    const update = () => setPortrait(query.matches)
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
 
   const applyPairingCode = useCallback((raw: string) => {
     try {
@@ -174,7 +183,6 @@ export default function App() {
     <header>
       <div className="brand">PITLINK</div>
       <button className={`connection ${connection}`} onClick={() => connection === 'offline' ? startController() : connect()}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'НАЧАТЬ / ПОДКЛЮЧИТЬ ПК'}</button>
-      <button className="settings-button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>⚙</button>
     </header>
     <section className="left-controls" aria-label="Педали">
       <Meter label="ГАЗ" value={throttle} color="teal" />
@@ -194,6 +202,7 @@ export default function App() {
       <button className={`manual ${manual ? 'active' : ''}`} onClick={() => setManual(value => !value)}><span>H</span> МКПП</button>
       <div className="gear-readout">{gearLabel}</div>
     </section>
+    <button className="portrait-settings" onClick={() => setSettingsOpen(true)}>НАСТРОЙКИ</button>
     {settingsOpen && <div className="sheet" role="dialog" aria-modal="true">
       <form onSubmit={event => { event.preventDefault(); setSettingsOpen(false); connect() }}>
         <h1>Подключение к ПК</h1>
