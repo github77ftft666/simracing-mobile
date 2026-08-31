@@ -22,7 +22,8 @@ export default function App() {
   const [gear, setGear] = useState(1)
   const socket = useRef<WebSocket | null>(null)
   const sequence = useRef(0)
-  const baseline = useRef({ beta: 0, gamma: 0 })
+  const baseline = useRef({ beta: 0, gamma: 0, isSet: false })
+  const latestOrientation = useRef({ beta: 0, gamma: 0, known: false })
   const controls = useRef({ steering: 0, throttle: 0, brake: 0, clutch: 0, gear: 1 })
 
   const send = useCallback((message: OutboundMessage) => {
@@ -41,8 +42,15 @@ export default function App() {
     } catch { setConnection('offline') }
   }, [endpoint])
 
-  const center = useCallback(() => {
-    baseline.current = { beta: 0, gamma: 0 }
+  const center = useCallback(async () => {
+    const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
+    if (motion.requestPermission && await motion.requestPermission() !== 'granted') {
+      alert('Разрешите доступ к движению устройства, затем нажмите «ЦЕНТР» ещё раз.')
+      return
+    }
+    baseline.current = latestOrientation.current.known
+      ? { beta: latestOrientation.current.beta, gamma: latestOrientation.current.gamma, isSet: true }
+      : { beta: 0, gamma: 0, isSet: false }
     setSteering(0); setThrottle(0); setBrake(0)
     controls.current.steering = 0; controls.current.throttle = 0; controls.current.brake = 0
     send({ type: 'event', action: 'center' })
@@ -66,7 +74,8 @@ export default function App() {
     const onOrientation = (event: DeviceOrientationEvent) => {
       const beta = event.beta ?? 0
       const gamma = event.gamma ?? 0
-      if (baseline.current.beta === 0 && baseline.current.gamma === 0) baseline.current = { beta, gamma }
+      latestOrientation.current = { beta, gamma, known: true }
+      if (!baseline.current.isSet) baseline.current = { beta, gamma, isSet: true }
       const newSteering = normalizedTilt(gamma - baseline.current.gamma)
       const pitch = beta - baseline.current.beta
       const newThrottle = clamp(Math.max(0, -pitch / 25))
@@ -78,19 +87,13 @@ export default function App() {
     return () => window.removeEventListener('deviceorientation', onOrientation)
   }, [])
 
-  const enableMotion = useCallback(async () => {
-    const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> }
-    if (motion.requestPermission && await motion.requestPermission() !== 'granted') alert('Разрешите доступ к движению устройства.')
-    center()
-  }, [center])
-
   const turn = Math.round(steering * 90)
   const gearLabel = manual ? (gear === 0 ? 'N' : `${gear}`) : `D${gear}`
   const dialStyle = useMemo(() => ({ '--turn': `${turn}deg` }) as React.CSSProperties, [turn])
 
   return <main className="controller">
     <header>
-      <button className="brand" onClick={enableMotion}>PITLINK</button>
+      <div className="brand">PITLINK</div>
       <button className={`connection ${connection}`} onClick={connect}><i />{connection === 'online' ? 'ПК ПОДКЛЮЧЁН' : connection === 'connecting' ? 'ПОДКЛЮЧЕНИЕ…' : 'ПОДКЛЮЧИТЬ ПК'}</button>
       <button className="settings-button" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>⚙</button>
     </header>
