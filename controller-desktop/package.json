@@ -8,10 +8,14 @@
     "build:exe": "pkg index.cjs --targets node18-win-x64 --output dist/PitLink-Controller.exe && node copy-assets.cjs"
   },
   "pkg": {
-    "assets": ["keyboard.ps1", "profiles/*.json"]
+    "assets": [
+      "keyboard.ps1",
+      "profiles/*.json"
+    ]
   },
   "dependencies": {
     "qrcode": "^1.5.4",
+    "selfsigned": "^5.5.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {

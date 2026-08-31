@@ -21,6 +21,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerError, setScannerError] = useState('')
+  const [setupUrl, setSetupUrl] = useState('')
   const [manual, setManual] = useState(false)
   const [steering, setSteering] = useState(0)
   const [throttle, setThrottle] = useState(0)
@@ -53,7 +54,7 @@ export default function App() {
       ws.onmessage = event => {
         try {
           const message = JSON.parse(event.data)
-          if (message.type === 'paired') setConnection('online')
+          if (message.type === 'paired') { setConnection('online'); setScannerError('') }
           if (message.type === 'error') { setScannerError(message.message); ws.close() }
         } catch { /* Ignore non-protocol messages. */ }
       }
@@ -67,14 +68,21 @@ export default function App() {
       const pair = new URL(raw)
       const pairedEndpoint = pair.searchParams.get('endpoint')
       const token = pair.searchParams.get('token')
+      const setup = pair.searchParams.get('setup')
       if (pair.protocol !== 'pitlink:' || !pairedEndpoint || !token) throw new Error()
       setEndpoint(pairedEndpoint)
       setPairingToken(token)
       localStorage.setItem('pitlink-endpoint', pairedEndpoint)
       localStorage.setItem('pitlink-pairing-token', token)
       setScannerOpen(false)
-      setSettingsOpen(false)
       setScannerError('')
+      setSetupUrl(setup ?? '')
+      if (pairedEndpoint.startsWith('wss://') && setup) {
+        setSettingsOpen(true)
+        setScannerError('Сначала установите локальный сертификат с ПК, затем вернитесь и подключитесь.')
+        return
+      }
+      setSettingsOpen(false)
       window.setTimeout(() => connect(pairedEndpoint, token), 0)
     } catch { setScannerError('Это не код PitLink Controller.') }
   }, [connect])
@@ -171,6 +179,7 @@ export default function App() {
         <label>Адрес ресивера <input value={endpoint} onChange={event => setEndpoint(event.target.value)} autoCapitalize="none" inputMode="url" /></label>
         <small>Порт: 32100 · Только локальная сеть</small>
         {scannerError && <p className="scan-error">{scannerError}</p>}
+        {setupUrl && <a className="setup-link" href={setupUrl} target="_blank" rel="noreferrer">Открыть настройку сертификата на ПК</a>}
         <div><button type="button" onClick={() => setScannerOpen(true)}>Сканировать QR</button><button type="button" onClick={() => setSettingsOpen(false)}>Отмена</button><button type="submit">Сохранить и подключить</button></div>
       </form>
     </div>}
