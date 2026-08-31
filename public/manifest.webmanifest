@@ -1,0 +1,9 @@
+{
+  "name": "PitLink Controller",
+  "short_name": "PitLink",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070909",
+  "theme_color": "#070909"
+}
