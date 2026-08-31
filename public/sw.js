@@ -1,4 +1,4 @@
-const CACHE = 'pitlink-v1'
+const CACHE = 'pitlink-v2'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest']
 
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL))))
