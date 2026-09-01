@@ -7,12 +7,14 @@ type Connection = 'offline' | 'connecting' | 'online'
 const clamp = (value: number) => Math.max(-1, Math.min(1, value))
 const STEERING_DEAD_ZONE = 5
 const PEDAL_DEAD_ZONE = 7
+const PEDAL_FULL_SCALE = 25
+const PEDAL_HARD_LIMIT = 45
 const normalizedTilt = (angle: number, deadZone: number, fullScale: number) => {
   const abs = Math.abs(angle)
   if (abs < deadZone) return 0
   return clamp(Math.sign(angle) * ((abs - deadZone) / (fullScale - deadZone)))
 }
-const pedalAmount = (angle: number) => Math.max(0, Math.min(1, (Math.abs(angle) - PEDAL_DEAD_ZONE) / (25 - PEDAL_DEAD_ZONE)))
+const pedalAmount = (angle: number) => Math.max(0, Math.min(1, (Math.abs(angle) - PEDAL_DEAD_ZONE) / (PEDAL_FULL_SCALE - PEDAL_DEAD_ZONE)))
 
 export default function App() {
   const [connection, setConnection] = useState<Connection>('offline')
@@ -170,12 +172,13 @@ export default function App() {
       if (!baseline.current.isSet) baseline.current = { beta, gamma, isSet: true }
       const steeringAngle = beta - baseline.current.beta
       const pedalAngle = gamma - baseline.current.gamma
+      const pedalInSafeRange = Math.abs(pedalAngle) <= PEDAL_HARD_LIMIT
       const newSteering = normalizedTilt(steeringAngle, STEERING_DEAD_ZONE, 32)
-      const newThrottle = pedalAngle > PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
-      const newBrake = pedalAngle < -PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
+      const newThrottle = pedalInSafeRange && pedalAngle > PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
+      const newBrake = pedalInSafeRange && pedalAngle < -PEDAL_DEAD_ZONE ? pedalAmount(pedalAngle) : 0
       controls.current.steering = newSteering; controls.current.throttle = newThrottle; controls.current.brake = newBrake
       setSteering(newSteering); setThrottle(newThrottle); setBrake(newBrake)
-      setSensor({ roll: steeringAngle, pitch: pedalAngle })
+      setSensor({ roll: steeringAngle, pitch: Math.max(-PEDAL_HARD_LIMIT, Math.min(PEDAL_HARD_LIMIT, pedalAngle)) })
     }
     window.addEventListener('deviceorientation', onOrientation)
     return () => window.removeEventListener('deviceorientation', onOrientation)
